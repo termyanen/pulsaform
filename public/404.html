@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head>
+    <script>
+      // SPA redirect for GitHub Pages
+      // Converts path to query param so index.html can restore the route
+      var base = '/pulsaform'
+      var path = window.location.pathname.replace(base, '')
+      var search = window.location.search
+      var hash = window.location.hash
+      window.location.replace(base + '/?route=' + encodeURIComponent(path + search + hash))
+    </script>
+  </head>
+</html>
