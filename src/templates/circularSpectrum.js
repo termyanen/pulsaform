@@ -25,7 +25,8 @@ export const circularSpectrum = {
 
   draw(ctx, width, height, bands, params, state, rawData) {
     const barCount = params.barCount.value
-    const innerRadius = params.innerRadius.value
+    const minDim = Math.min(width, height)
+    const innerRadius = Math.min(params.innerRadius.value, minDim * 0.25)
     const barWidth = params.barWidth.value
     const sensitivity = params.sensitivity.value
     const glow = params.glow.value
