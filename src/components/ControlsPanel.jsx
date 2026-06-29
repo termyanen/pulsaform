@@ -9,6 +9,14 @@ function formatTime(s) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
+const RATIO_OPTIONS = [
+  { key: 'full', label: 'Full' },
+  { key: '9:16', label: '9:16' },
+  { key: '4:5',  label: '4:5'  },
+  { key: '1:1',  label: '1:1'  },
+  { key: '16:9', label: '16:9' },
+]
+
 export default function ControlsPanel({
   source,
   fileName,
@@ -16,12 +24,16 @@ export default function ControlsPanel({
   params,
   micDevices,
   selectedMicId,
+  aspectRatio,
+  delayedStart,
+  onDelayedStartChange,
   onMicToggle,
   onMicDeviceChange,
   onFileSelect,
   onTemplateChange,
   onParamChange,
   onResetParams,
+  onAspectRatioChange,
   defaultOpen,
   uiVisible,
   playerState,
@@ -106,6 +118,14 @@ export default function ControlsPanel({
             </button>
             {fileName && <span className="source-file-name">{fileName}</span>}
           </div>
+          <label className="delay-toggle">
+            <input
+              type="checkbox"
+              checked={delayedStart}
+              onChange={(e) => onDelayedStartChange(e.target.checked)}
+            />
+            <span>10s delay</span>
+          </label>
         </div>
 
         {/* Player */}
@@ -138,6 +158,22 @@ export default function ControlsPanel({
             </div>
           </div>
         )}
+
+        {/* Canvas ratio */}
+        <div className="controls-section">
+          <div className="controls-section-title">Canvas Ratio</div>
+          <div className="ratio-buttons">
+            {RATIO_OPTIONS.map(({ key, label }) => (
+              <button
+                key={key}
+                className={`ratio-btn ${aspectRatio === key ? 'active' : ''}`}
+                onClick={() => onAspectRatioChange(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Template selector */}
         <div className="controls-section">

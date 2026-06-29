@@ -6,6 +6,8 @@ import { spectrogram } from './spectrogram'
 import { terrain } from './terrain'
 import { equalizer } from './equalizer'
 import { colorWaves } from './colorWaves'
+import { contourWaves } from './contourWaves'
+import { constellation } from './constellation'
 
 export const TEMPLATES = {
   flowField,
@@ -16,6 +18,8 @@ export const TEMPLATES = {
   terrain,
   equalizer,
   colorWaves,
+  contourWaves,
+  constellation,
 }
 
 export const TEMPLATE_LIST = [
@@ -27,4 +31,6 @@ export const TEMPLATE_LIST = [
   terrain,
   equalizer,
   colorWaves,
+  contourWaves,
+  constellation,
 ]

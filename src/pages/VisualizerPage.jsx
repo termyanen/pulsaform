@@ -7,6 +7,27 @@ import './VisualizerPage.css'
 const STORAGE_KEY = 'audioViz'
 const DEFAULT_TEMPLATE = 'flowField'
 
+const ASPECT_RATIOS = {
+  full:  null,
+  '9:16': { w: 9,  h: 16 },
+  '4:5':  { w: 4,  h: 5  },
+  '1:1':  { w: 1,  h: 1  },
+  '16:9': { w: 16, h: 9  },
+}
+
+function computeCanvasBounds(ratioKey) {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const ratio = ASPECT_RATIOS[ratioKey]
+  if (!ratio) return { width: vw, height: vh, left: 0, top: 0 }
+  const scale  = Math.min(vw / ratio.w, vh / ratio.h)
+  const width  = Math.floor(ratio.w * scale)
+  const height = Math.floor(ratio.h * scale)
+  const left   = Math.floor((vw - width)  / 2)
+  const top    = Math.floor((vh - height) / 2)
+  return { width, height, left, top }
+}
+
 function loadSaved() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -47,12 +68,29 @@ function saveToStorage(templateId, params) {
   } catch { /* storage full, ignore */ }
 }
 
+function saveAspectRatio(ratio) {
+  const saved = loadSaved() || {}
+  saved.aspectRatio = ratio
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
+  } catch { /* ignore */ }
+}
+
+function saveDelayedStart(val) {
+  const saved = loadSaved() || {}
+  saved.delayedStart = val
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
+  } catch { /* ignore */ }
+}
+
 export default function VisualizerPage({ onBack }) {
   const canvasRef = useRef(null)
   const stateRef = useRef(null)
   const animRef = useRef(null)
   const paramsRef = useRef(null)
   const templateIdRef = useRef(null)
+  const aspectRatioRef = useRef('full')
   const audioRef = useRef(null)
 
   const [source, setSource] = useState(null)
@@ -64,10 +102,17 @@ export default function VisualizerPage({ onBack }) {
   const [params, setParams] = useState(() => loadParamsForTemplate(
     loadSaved()?.activeTemplate && TEMPLATES[loadSaved()?.activeTemplate] ? loadSaved().activeTemplate : DEFAULT_TEMPLATE
   ))
+  const [aspectRatio, setAspectRatio] = useState(() => {
+    const saved = loadSaved()
+    return saved?.aspectRatio && ASPECT_RATIOS[saved.aspectRatio] !== undefined ? saved.aspectRatio : 'full'
+  })
   const [micDevices, setMicDevices] = useState([])
   const [selectedMicId, setSelectedMicId] = useState('')
   const [uiVisible, setUiVisible] = useState(true)
   const [playerState, setPlayerState] = useState(null)
+  const [delayedStart, setDelayedStart] = useState(() => loadSaved()?.delayedStart ?? false)
+  const [countdown, setCountdown] = useState(null)
+  const countdownRef = useRef(null)
   const hideTimerRef = useRef(null)
 
   const audio = useAudioEngine()
@@ -104,8 +149,13 @@ export default function VisualizerPage({ onBack }) {
   const initCanvas = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
+    const { width, height, left, top } = computeCanvasBounds(aspectRatioRef.current)
+    canvas.width        = width
+    canvas.height       = height
+    canvas.style.left   = left + 'px'
+    canvas.style.top    = top  + 'px'
+    const hasRatio = aspectRatioRef.current !== 'full'
+    canvas.classList.toggle('ratio-frame', hasRatio)
   }, [])
 
   const initTemplateState = useCallback((templateId, currentParams) => {
@@ -163,6 +213,19 @@ export default function VisualizerPage({ onBack }) {
     }
   }, [activeTemplateId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reinit canvas + template state when aspect ratio changes
+  useEffect(() => {
+    aspectRatioRef.current = aspectRatio
+    initCanvas()
+    const canvas = canvasRef.current
+    if (canvas) {
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    }
+    initTemplateState(templateIdRef.current, paramsRef.current)
+  }, [aspectRatio]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadMicDevices = useCallback(async () => {
     try {
       const devices = await audio.enumerateAudioInputs()
@@ -177,8 +240,33 @@ export default function VisualizerPage({ onBack }) {
     }
   }, [audio, selectedMicId])
 
+  const cancelCountdown = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+    setCountdown(null)
+  }
+
+  const startWithDelay = (startFn) => {
+    if (!delayedStart) { startFn(); return }
+    cancelCountdown()
+    setCountdown(10)
+    let count = 10
+    countdownRef.current = setInterval(() => {
+      count--
+      if (count <= 0) {
+        cancelCountdown()
+        startFn()
+      } else {
+        setCountdown(count)
+      }
+    }, 1000)
+  }
+
   const handleMicToggle = async () => {
     if (source === 'mic') {
+      cancelCountdown()
       audio.stop()
       setSource(null)
       return
@@ -192,9 +280,11 @@ export default function VisualizerPage({ onBack }) {
           setSelectedMicId(deviceId)
         }
       }
-      await audio.startFromMicrophone(deviceId)
-      setSource('mic')
-      setFileName('')
+      startWithDelay(async () => {
+        await audio.startFromMicrophone(deviceId)
+        setSource('mic')
+        setFileName('')
+      })
     } catch (err) {
       console.error('Microphone error:', err)
     }
@@ -213,9 +303,11 @@ export default function VisualizerPage({ onBack }) {
 
   const handleFileSelect = async (file) => {
     try {
-      await audio.startFromFile(file)
-      setSource('file')
-      setFileName(file.name)
+      startWithDelay(async () => {
+        await audio.startFromFile(file)
+        setSource('file')
+        setFileName(file.name)
+      })
     } catch (err) {
       console.error('File error:', err)
     }
@@ -250,6 +342,11 @@ export default function VisualizerPage({ onBack }) {
     })
   }
 
+  const handleAspectRatioChange = (ratio) => {
+    setAspectRatio(ratio)
+    saveAspectRatio(ratio)
+  }
+
   const handleBack = () => {
     audio.stop()
     if (animRef.current) cancelAnimationFrame(animRef.current)
@@ -257,8 +354,12 @@ export default function VisualizerPage({ onBack }) {
   }
 
   return (
-    <div className="visualizer">
+    <div className={`visualizer ${aspectRatio !== 'full' ? 'has-ratio' : ''}`}>
       <canvas ref={canvasRef} />
+
+      {countdown !== null && (
+        <div className="countdown-overlay" style={{ display: 'none' }} />
+      )}
 
       <button className={`back-btn ${uiVisible ? '' : 'ui-hidden'}`} onClick={handleBack} title="Back to home">
         ←
@@ -271,12 +372,16 @@ export default function VisualizerPage({ onBack }) {
         params={params}
         micDevices={micDevices}
         selectedMicId={selectedMicId}
+        aspectRatio={aspectRatio}
+        delayedStart={delayedStart}
         onMicToggle={handleMicToggle}
         onMicDeviceChange={handleMicDeviceChange}
         onFileSelect={handleFileSelect}
         onTemplateChange={handleTemplateChange}
         onParamChange={handleParamChange}
         onResetParams={handleResetParams}
+        onAspectRatioChange={handleAspectRatioChange}
+        onDelayedStartChange={(val) => { setDelayedStart(val); saveDelayedStart(val) }}
         defaultOpen
         uiVisible={uiVisible}
         playerState={playerState}
